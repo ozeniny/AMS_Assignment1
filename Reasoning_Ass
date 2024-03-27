@@ -1,0 +1,91 @@
+import re
+from csv import excel
+
+
+def eliminate_implication(expression):
+    return re.sub(r'(.*)\s*->\s*(.*)', r'(not (\1)) or (\2)', expression)
+def move_negation_inward(expression):
+    match_or = re.search(r'not\s*\(\s*(.*)or(.*)\)',expression)
+    match_and = re.search(r'not\s*\(\s*(.*)or(.*)\)',expression)
+    if match_or:
+        if(match_or.group(1).find("and") != -1):
+            expression = re.sub(r'not\s*\(\s*(.*)and(.*)\)', r'(not \1) or (not \2)', expression)
+        else:
+            expression = re.sub(r'not\s*\(\s*(.*)or(.*)\)', r'(not \1) and (not \2)', expression)
+    else:
+        if(match_and.group(1).find("or") != -1):
+            expression = re.sub(r'not\s*\(\s*(.*)or(.*)\)', r'(not \1) and (not \2)', expression)
+        else:
+            expression = re.sub(r'not\s*\(\s*(.*)and(.*)\)', r'(not \1) or (not \2)', expression)
+    return expression
+
+def remove_double_not(expression):
+    expression = re.sub(r'not\s*not\s*', r'', expression);
+    return expression
+
+def skolemization(expression):
+    while 'exists' in expression:
+        matchE = re.search(r'exists\s*([a-zA-Z]\w*)\s*(.*)', expression)
+        matchA = re.search(r'forall\s*([a-zA-Z]\w*)\s*(.*)', expression)
+        if matchE:
+            variable_E = matchE.group(1)
+            variable_A = matchA.group(1)
+            scope = matchE.group(2)
+            function_symbol = f'f_{variable_E}'
+            skolemized_expression = re.sub(r'exists\s*([a-zA-Z]\w*)', "", expression, 1)
+            skolemized_expression = skolemized_expression.replace(f'{variable_E}', f'{function_symbol}({variable_A})')
+            expression = re.sub(r'forall\s*' + variable_E, '', skolemized_expression)
+        else:
+            break
+    return expression
+
+
+def eliminate_universal_quantifiers(expression):
+    return re.sub(r'forall\s*([a-zA-Z]\w*)', '', expression)
+
+def distribution(expression):
+    match = re.search(r'\(\s*(.*)and(.*)\)\s*or(.*)', expression)
+    if match:
+        expression = re.sub(r'\(\s*(.*)and(.*)\)\s*or(.*)', r'((\1) or (\3)) and ((\2) or (\3))', expression)
+    return expression
+def convert_to_cnf(expression):
+    clauses = expression.split(' and ')
+    cnf_clauses = []
+    for clause in clauses:
+        disjunctions = clause.split(' or ')
+        cnf_clauses.append(disjunctions)
+    return cnf_clauses
+
+def rename_variables(clauses):
+    renamed_clauses = []
+    variable_map = {}
+    for clause in clauses:
+        renamed_clause = []
+        for literal in clause:
+            variable = re.findall(r'[a-zA-Z]\w*', literal)[0]
+            if variable in variable_map:
+                new_var = variable_map[variable]
+            else:
+                new_var = f'{variable}_'
+                variable_map[variable] = new_var
+            renamed_literal = literal.replace(variable, new_var)
+            renamed_clause.append(renamed_literal)
+        renamed_clauses.append(renamed_clause)
+    return renamed_clauses
+
+def resolution(prop):
+    proposition = eliminate_implication(prop)
+    proposition = move_negation_inward(proposition)
+    proposition = remove_double_not(proposition)
+    proposition = skolemization(proposition)
+    proposition = eliminate_universal_quantifiers(proposition)
+    proposition = distribution(proposition)
+    cnf_clauses = []
+    cnf_clauses.extend(convert_to_cnf(proposition))
+    renamed_clauses = rename_variables(cnf_clauses)
+    return renamed_clauses
+
+prop = 'not forall x (P(x) -> exists y Q(x, y))';
+
+resolved_clauses = resolution(prop)
+print(resolved_clauses)
