@@ -1,5 +1,4 @@
 import re
-from csv import excel
 
 
 def eliminate_implication(expression):
