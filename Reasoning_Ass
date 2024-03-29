@@ -1,52 +1,152 @@
 import re
-
-
+import random
 def eliminate_implication(expression):
-    return re.sub(r'(.*)\s*->\s*(.*)', r'(not (\1)) or (\2)', expression)
-def move_negation_inward(expression):
-    match_or = re.search(r'not\s*\(\s*(.*)or(.*)\)',expression)
-    match_and = re.search(r'not\s*\(\s*(.*)or(.*)\)',expression)
-    if match_or:
-        if(match_or.group(1).find("and") != -1):
-            expression = re.sub(r'not\s*\(\s*(.*)and(.*)\)', r'(not \1) or (not \2)', expression)
-        else:
-            expression = re.sub(r'not\s*\(\s*(.*)or(.*)\)', r'(not \1) and (not \2)', expression)
-    else:
-        if(match_and.group(1).find("or") != -1):
-            expression = re.sub(r'not\s*\(\s*(.*)or(.*)\)', r'(not \1) and (not \2)', expression)
-        else:
-            expression = re.sub(r'not\s*\(\s*(.*)and(.*)\)', r'(not \1) or (not \2)', expression)
+    list = expression.split(' ')
+    i = 0
+    while i < len(list):
+        if list[i] == "->":
+            list[i] = "or"
+            if list[i-2] == '[' or list[i-2] == '(':
+                list[i-1] = "not "+list[i-1]
+            else:
+                list[i-1] = "not "+list[i-1]
+        i = i + 1
+    expression = ' '.join(list)
+    return expression
+
+def convert_forall_exist(expression):
+    list = expression.split(' ')
+    i = 0
+    while i < len(list):
+        if list[i] == "not":
+            if list[i + 1] == "exist":
+                list[i] = ""
+                list[i + 1] = "forall"
+                list[i + 2] = list[i + 2] + " not"
+            elif list[i + 1] == "forall":
+                list[i] = ""
+                list[i + 1] = "exist"
+                list[i + 2] = list[i + 2] + " not"
+        i = i + 1
+    expression = ' '.join(list)
+    return expression
+def move_negation_inward(exp):
+    expression = convert_forall_exist(exp)
+    list = expression.split(' ')
+    i = 0
+    while i < len(list):
+        if list[i] == "not":
+            if list[i+1]=="[" and list[i+3]=="and":
+                list[i] = ""
+                list[i+1] = list[i+1]+" not"
+                list[i+3] = "or not"
+            elif list[i+1] == "[" and list[i+3]=="or":
+                list[i] = ""
+                list[i+1] = list[i+1]+" not"
+                list[i+3] = "and not"
+        i = i + 1
+    expression = ' '.join(list)
     return expression
 
 def remove_double_not(expression):
-    expression = re.sub(r'not\s*not\s*', r'', expression);
+    expression = re.sub(r'not\s*not\s*', r' ', expression)
     return expression
-
 def skolemization(expression):
-    while 'exists' in expression:
-        matchE = re.search(r'exists\s*([a-zA-Z]\w*)\s*(.*)', expression)
-        matchA = re.search(r'forall\s*([a-zA-Z]\w*)\s*(.*)', expression)
-        if matchE:
-            variable_E = matchE.group(1)
-            variable_A = matchA.group(1)
-            scope = matchE.group(2)
-            function_symbol = f'f_{variable_E}'
-            skolemized_expression = re.sub(r'exists\s*([a-zA-Z]\w*)', "", expression, 1)
-            skolemized_expression = skolemized_expression.replace(f'{variable_E}', f'{function_symbol}({variable_A})')
-            expression = re.sub(r'forall\s*' + variable_E, '', skolemized_expression)
+    while 'exist' in expression:
+        match = re.search(r'(forall\s*\w\s*\[.*)exist\s*(\w)\s*(.*?\])', expression)
+        if match:
+            variable_E = match.group(2)
+            variable_A = match.group(1).split(" ")[1]
+            function_symbol = f'f({variable_A})'
+
+            match = re.search(r'(forall\s*\w\s*\[.*)exist\s*(\w)\s*(.*?\])',expression)
+            str = match.group(3)
+            new_str = str.replace("y",function_symbol)
+            skolemized_expression = re.sub(r'(forall\s*\w\s*\[.*)exist\s*(\w)\s*(.*?\])', r"\1\3", expression)
+            skolemized_expression = skolemized_expression.replace(str, new_str)
+            expression = skolemized_expression
         else:
             break
     return expression
-
-
-def eliminate_universal_quantifiers(expression):
-    return re.sub(r'forall\s*([a-zA-Z]\w*)', '', expression)
-
-def distribution(expression):
-    match = re.search(r'\(\s*(.*)and(.*)\)\s*or(.*)', expression)
-    if match:
-        expression = re.sub(r'\(\s*(.*)and(.*)\)\s*or(.*)', r'((\1) or (\3)) and ((\2) or (\3))', expression)
+def Standardize_variable_scope(expression):
+    list = expression.split(' ')
+    i = 0
+    old_variable = ""
+    new_variable = generate_variables()
+    while i < len(list):
+        if list[i] == 'forall':
+            j = i + 1
+            while j < len(list):
+                if list[j] == list[i] and list[j+1] == list[i+1]:
+                    old_variable = list[j+1]
+                    list[j+1] = new_variable
+                j += 1
+        i += 1
+    expression = ' '.join(list)
+    new_exp = expression.split(new_variable)
+    new_exp[1] = new_exp[1].replace(old_variable, new_variable)
+    expression = new_variable.join(new_exp)
     return expression
+
+def prenex (expression):
+    list = re.findall(r'(forall\s*[a-zA-Z]\w*)',expression)
+    expression = eliminate_universal_quantifiers(expression)
+    i = len(list)
+    while i > 0:
+        expression = list[i-1]+" "+expression
+        i -= 1
+    return expression
+def eliminate_universal_quantifiers(expression):
+    return re.sub(r'forall\s*([a-zA-Z]\w*\s*)', '', expression)
+
+def generate_variables():
+    return random.choice([chr(char_code) for char_code in range(ord('u'), ord('w')+1)])
+def distribution(expression):
+    match = re.search(r'(.*)or\s*\((.*)and(.*)\)\s*\]', expression)
+    if match:
+        list = expression.split(' ')
+        i = 0
+        STR = ""
+        while i < len(list):
+            if list[i] == "or" and list[i+2] == "[":
+                if list[i-2] == "not":
+                    STR += "/"+list[i-2]+" "
+                    STR += list[i-1]+" "
+                    STR += list[i]
+                    list[i]=list[i-1]=list[i-2] = ""
+                else:
+                    STR += "/"+list[i - 1]+" "
+                    STR += list[i]
+                    list[i] = list[i - 1] = ""
+                j = i+1
+                while j < len(list):
+                    if list[j] == "[":
+                        list[j] = STR + " ["
+                    elif list[j] == "]":
+                        list[j] = "]/"
+                    j = j +1
+            i += 1
+        expression = " ".join(list)
+    expression = Move_the_disjunction(expression)
+    return expression
+def Move_the_disjunction(expression):
+    list= expression.split("/")
+    Exp = ""
+    for i in list:
+        match1 = re.search(r'(.*)\s*or\s*\[(.*)\s*and\s*(.*)\s*\]', i)
+        match2 = re.search(r'(.*)\s*or\s*\[(.*)\s*or\s*(.*)\s*\]', i)
+        match3 = re.search(r'\s*and\s*', i)
+        if match1:
+            i = re.sub(r'(.*)\s*or\s*\[(.*)\s*and\s*(.*)\s*\]',r'\1 or \2 and \1 or \3',i)
+            Exp = Exp + i +" "
+        elif match2:
+            i = re.sub(r'(.*)\s*or\s*\[(.*)\s*or\s*(.*)\s*\]', r'\1 or \2 or \3', i)
+            Exp = Exp + i +" "
+        elif match3 :
+            i = re.sub(r'\s*(and)\s*', r'\1', i)
+            Exp = Exp + i + " "
+    return Exp
+
 def convert_to_cnf(expression):
     clauses = expression.split(' and ')
     cnf_clauses = []
@@ -71,20 +171,22 @@ def rename_variables(clauses):
             renamed_clause.append(renamed_literal)
         renamed_clauses.append(renamed_clause)
     return renamed_clauses
-
 def resolution(prop):
     proposition = eliminate_implication(prop)
     proposition = move_negation_inward(proposition)
     proposition = remove_double_not(proposition)
     proposition = skolemization(proposition)
+    proposition = Standardize_variable_scope(proposition)
+    proposition = prenex(proposition)
     proposition = eliminate_universal_quantifiers(proposition)
     proposition = distribution(proposition)
-    cnf_clauses = []
-    cnf_clauses.extend(convert_to_cnf(proposition))
-    renamed_clauses = rename_variables(cnf_clauses)
-    return renamed_clauses
+    clauses = []
+    clauses = convert_to_cnf(proposition)
+    return clauses
 
-prop = 'not forall x (P(x) -> exists y Q(x, y))';
-
+# prop = 'not forall x (exist y Q(x, y) -> P(x)) and not exist z W(z)'
+prop = ('forall x [ B(x) -> ( exist y [ Q(x,y) and not P(y) ] '
+                            'and not exist y [ Q(x,y) and Q(y,x) ] '
+                            'and forall y [not B(y) -> not E(x,y) ) ]')
 resolved_clauses = resolution(prop)
 print(resolved_clauses)
